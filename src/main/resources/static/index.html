@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Empréstimo de Equipamentos</title>
+    <style>
+        body { font-family: Arial, sans-serif; max-width: 1000px; margin: 0 auto; padding: 16px; background: #f4f6f8; color: #222; }
+        h1 { margin-bottom: 4px; }
+        section { background: #fff; border-radius: 8px; padding: 16px; margin-top: 16px; box-shadow: 0 1px 3px rgba(0,0,0,.1); }
+        form { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+        input, select, button { padding: 6px 8px; font-size: 14px; }
+        button { cursor: pointer; border: none; border-radius: 4px; background: #2563eb; color: #fff; }
+        button.perigo { background: #dc2626; }
+        table { width: 100%; border-collapse: collapse; font-size: 14px; }
+        th, td { border-bottom: 1px solid #ddd; padding: 6px; text-align: left; }
+        #mensagem { padding: 10px; border-radius: 4px; display: none; }
+        #mensagem.ok { display: block; background: #dcfce7; color: #166534; }
+        #mensagem.erro { display: block; background: #fee2e2; color: #991b1b; }
+    </style>
+</head>
+<body>
+<h1>Empréstimo de Equipamentos</h1>
+<p id="mensagem"></p>
+
+<!-- EQUIPAMENTOS -->
+<section>
+    <h2>Equipamentos</h2>
+    <form onsubmit="cadastrarEquipamento(event)">
+        <input id="eq-patrimonio" placeholder="Patrimônio" required>
+        <input id="eq-nome" placeholder="Nome" required>
+        <select id="eq-tipo">
+            <option>NOTEBOOK</option><option>MONITOR</option><option>MOUSE</option>
+            <option>TECLADO</option><option>HEADSET</option><option>OUTRO</option>
+        </select>
+        <button type="submit">Cadastrar</button>
+    </form>
+    <label>Mostrar:
+        <select id="eq-filtro" onchange="carregarEquipamentos()">
+            <option value="">Todos</option>
+            <option value="true">Disponíveis</option>
+            <option value="false">Emprestados</option>
+        </select>
+    </label>
+    <table>
+        <thead><tr><th>ID</th><th>Patrimônio</th><th>Nome</th><th>Tipo</th><th>Disponível</th><th></th></tr></thead>
+        <tbody id="tabela-equipamentos"></tbody>
+    </table>
+</section>
+
+<!-- COLABORADORES -->
+<section>
+    <h2>Colaboradores</h2>
+    <form onsubmit="cadastrarColaborador(event)">
+        <input id="col-nome" placeholder="Nome" required>
+        <input id="col-email" type="email" placeholder="E-mail" required>
+        <input id="col-cargo" placeholder="Cargo">
+        <button type="submit">Cadastrar</button>
+    </form>
+    <table>
+        <thead><tr><th>ID</th><th>Nome</th><th>E-mail</th><th>Cargo</th></tr></thead>
+        <tbody id="tabela-colaboradores"></tbody>
+    </table>
+</section>
+
+<!-- EMPRÉSTIMOS -->
+<section>
+    <h2>Empréstimos</h2>
+    <form onsubmit="emprestar(event)">
+        <input id="emp-equipamento" type="number" placeholder="ID do equipamento" required>
+        <input id="emp-colaborador" type="number" placeholder="ID do colaborador" required>
+        <button type="submit">Emprestar</button>
+    </form>
+    <label><input type="checkbox" id="emp-atrasados" onchange="carregarEmprestimos()"> Só atrasados</label>
+    <table>
+        <thead><tr><th>ID</th><th>Equip.</th><th>Colab.</th><th>Empréstimo</th><th>Previsão</th><th>Devolução</th><th>Atrasado</th><th></th></tr></thead>
+        <tbody id="tabela-emprestimos"></tbody>
+    </table>
+</section>
+
+<script>
+    // Faz a requisição e devolve o JSON; se der erro, lança a mensagem que veio da API
+    async function api(metodo, url, corpo) {
+        const opcoes = { method: metodo, headers: {} };
+        if (corpo) {
+            opcoes.headers['Content-Type'] = 'application/json';
+            opcoes.body = JSON.stringify(corpo);
+        }
+        const resposta = await fetch(url, opcoes);
+        if (!resposta.ok) {
+            let mensagem = 'Erro ' + resposta.status;
+            try {
+                const erro = await resposta.json();
+                if (erro.message) mensagem = erro.message;
+            } catch (e) { }
+            throw new Error(mensagem);
+        }
+        if (resposta.status === 204) return null;
+        return resposta.json();
+    }
+
+    function mostrar(texto, ehErro) {
+        const p = document.getElementById('mensagem');
+        p.textContent = texto;
+        p.className = ehErro ? 'erro' : 'ok';
+    }
+
+    // Monta uma linha da tabela; textContent evita que um texto vire código HTML
+    function adicionarLinha(tbody, valores, botao) {
+        const tr = document.createElement('tr');
+        for (const valor of valores) {
+            const td = document.createElement('td');
+            td.textContent = valor ?? '-';
+            tr.appendChild(td);
+        }
+        if (botao !== undefined) {
+            const td = document.createElement('td');
+            if (botao) td.appendChild(botao);
+            tr.appendChild(td);
+        }
+        tbody.appendChild(tr);
+    }
+
+    function criarBotao(texto, classe, acao) {
+        const botao = document.createElement('button');
+        botao.textContent = texto;
+        if (classe) botao.className = classe;
+        botao.onclick = acao;
+        return botao;
+    }
+
+    // ---------- EQUIPAMENTOS ----------
+    async function carregarEquipamentos() {
+        const filtro = document.getElementById('eq-filtro').value;
+        const url = filtro ? '/equipamentos?disponivel=' + filtro : '/equipamentos';
+        const tbody = document.getElementById('tabela-equipamentos');
+        try {
+            const equipamentos = await api('GET', url);
+            tbody.innerHTML = '';
+            for (const e of equipamentos) {
+                const botao = criarBotao('Remover', 'perigo', () => removerEquipamento(e.id));
+                adicionarLinha(tbody, [e.id, e.patrimonio, e.nome, e.tipo, e.disponivel ? 'Sim' : 'Não'], botao);
+            }
+        } catch (erro) {
+            mostrar(erro.message, true);
+        }
+    }
+
+    async function cadastrarEquipamento(evento) {
+        evento.preventDefault();
+        try {
+            await api('POST', '/equipamentos', {
+                patrimonio: document.getElementById('eq-patrimonio').value,
+                nome: document.getElementById('eq-nome').value,
+                tipo: document.getElementById('eq-tipo').value
+            });
+            evento.target.reset();
+            mostrar('Equipamento cadastrado!');
+            carregarEquipamentos();
+        } catch (erro) {
+            mostrar(erro.message, true);
+        }
+    }
+
+    async function removerEquipamento(id) {
+        if (!confirm('Remover o equipamento ' + id + '?')) return;
+        try {
+            await api('DELETE', '/equipamentos/' + id);
+            mostrar('Equipamento removido!');
+            carregarEquipamentos();
+        } catch (erro) {
+            mostrar(erro.message, true);
+        }
+    }
+
+    // ---------- COLABORADORES ----------
+    async function carregarColaboradores() {
+        const tbody = document.getElementById('tabela-colaboradores');
+        try {
+            const colaboradores = await api('GET', '/colaboradores');
+            tbody.innerHTML = '';
+            for (const c of colaboradores) {
+                adicionarLinha(tbody, [c.id, c.nome, c.email, c.cargo]);
+            }
+        } catch (erro) {
+            mostrar(erro.message, true);
+        }
+    }
+
+    async function cadastrarColaborador(evento) {
+        evento.preventDefault();
+        try {
+            await api('POST', '/colaboradores', {
+                nome: document.getElementById('col-nome').value,
+                email: document.getElementById('col-email').value,
+                cargo: document.getElementById('col-cargo').value
+            });
+            evento.target.reset();
+            mostrar('Colaborador cadastrado!');
+            carregarColaboradores();
+        } catch (erro) {
+            mostrar(erro.message, true);
+        }
+    }
+
+    // ---------- EMPRÉSTIMOS ----------
+    async function carregarEmprestimos() {
+        const atrasados = document.getElementById('emp-atrasados').checked;
+        const url = atrasados ? '/emprestimos?atrasados=true' : '/emprestimos';
+        const tbody = document.getElementById('tabela-emprestimos');
+        try {
+            const emprestimos = await api('GET', url);
+            tbody.innerHTML = '';
+            for (const e of emprestimos) {
+                const botao = e.dataDevolucao ? null : criarBotao('Devolver', '', () => devolver(e.id));
+                adicionarLinha(tbody, [
+                    e.id, e.equipamentoId, e.colaboradorId,
+                    e.dataEmprestimo, e.dataPrevistaDevolucao, e.dataDevolucao,
+                    e.atrasado ? 'Sim' : 'Não'
+                ], botao);
+            }
+        } catch (erro) {
+            mostrar(erro.message, true);
+        }
+    }
+
+    async function emprestar(evento) {
+        evento.preventDefault();
+        const equipamentoId = document.getElementById('emp-equipamento').value;
+        const colaboradorId = document.getElementById('emp-colaborador').value;
+        try {
+            await api('POST', '/emprestimos?equipamentoId=' + equipamentoId + '&colaboradorId=' + colaboradorId);
+            evento.target.reset();
+            mostrar('Empréstimo registrado!');
+            carregarEmprestimos();
+            carregarEquipamentos();
+        } catch (erro) {
+            mostrar(erro.message, true);
+        }
+    }
+
+    async function devolver(id) {
+        try {
+            await api('PUT', '/emprestimos/' + id + '/devolucao');
+            mostrar('Devolução registrada!');
+            carregarEmprestimos();
+            carregarEquipamentos();
+        } catch (erro) {
+            mostrar(erro.message, true);
+        }
+    }
+
+    // Ao abrir a página, carrega as três tabelas
+    carregarEquipamentos();
+    carregarColaboradores();
+    carregarEmprestimos();
+</script>
+</body>
+</html>
