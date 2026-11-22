@@ -29,8 +29,8 @@ public class Emprestimo {
     public Emprestimo() {
     }
 
-    public Emprestimo(Long equipamentoId, Long colaboradorId, LocalDate hoje) { //Para criar um empréstimo, me entregue 3 coisas": um Long chamado equipamentoId, um Long chamado colaboradorId e um LocalDate chamado hoje. Só tipo + nome, sem contas.
-        this.equipamentoId = equipamentoId; //Guarda o parâmetro no atributo. O this. indica o atributo da classe; o nome sem this. é o parâmetro que chegou.
+    public Emprestimo(Long equipamentoId, Long colaboradorId, LocalDate hoje) {
+        this.equipamentoId = equipamentoId;
         this.colaboradorId = colaboradorId;
         this.dataEmprestimo = hoje;
         this.dataPrevistaDevolucao = hoje.plusDays(DIAS_DE_EMPRESTIMO);
