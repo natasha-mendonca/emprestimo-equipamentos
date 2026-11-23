@@ -135,6 +135,9 @@ src/test/java/com/example/emprestimo/model/
 └── EmprestimoTest.java    (7 testes)
 ```
 
+## Vídeo
+
+[Assistir ao vídeo] (https://drive.google.com/file/d/1lC1Nvrb_gxXLyP2RXDmFf95v6RAEitcc/view?usp=sharing)
 ## Autora
 
 Natasha Mendonça
